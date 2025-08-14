@@ -357,6 +357,13 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Changelog
 
+### v1.0.1
+- **🔧 API Fix**: Updated to match official Veo 3 API specification
+- **Removed unsupported parameters**: aspect_ratio, negative_prompt, person_generation
+- **Simplified API calls**: Now using only model and prompt parameters as per official docs
+- **Fixed video generation errors**: Resolved "unexpected keyword argument" issues
+- **Updated documentation**: Added notes about current API limitations
+
 ### v1.0.0
 - Initial release
 - Support for Veo 3, Veo 3 Fast, and Veo 2 models

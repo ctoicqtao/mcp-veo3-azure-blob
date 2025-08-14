@@ -91,8 +91,6 @@ async def generate_video_with_progress(
     prompt: str,
     model: str,
     ctx: Context,
-    negative_prompt: Optional[str] = None,
-    aspect_ratio: str = "16:9",
     image_path: Optional[str] = None,
     poll_interval: int = 10,
     max_poll_time: int = 600
@@ -102,35 +100,27 @@ async def generate_video_with_progress(
     start_time = time.time()
     
     try:
-        # Prepare generation parameters
-        generation_params = {
-            "model": model,
-            "prompt": prompt,
-        }
-        
-        # Add negative prompt if provided
-        if negative_prompt:
-            generation_params["negative_prompt"] = negative_prompt
-            
-        # Add aspect ratio if supported
-        if model != "veo-2.0-generate-001" or aspect_ratio == "16:9":
-            generation_params["aspect_ratio"] = aspect_ratio
-            
-        # Add person generation setting (required for EU/UK/CH/MENA)
-        generation_params["person_generation"] = "dont_allow"
-        
-        # Handle image-to-video if image provided
-        if image_path and os.path.exists(image_path):
-            await ctx.info(f"Uploading image: {image_path}")
-            image_file = gemini_client.files.upload(path=image_path)
-            generation_params["image"] = image_file
-        
         await ctx.info(f"Starting video generation with model: {model}")
         await ctx.info(f"Prompt: {prompt[:100]}...")
         
-        # Start video generation
+        # Start video generation - using official API format
         await ctx.report_progress(progress=5, total=100)
-        operation = gemini_client.models.generate_videos(**generation_params)
+        
+        if image_path and os.path.exists(image_path):
+            await ctx.info(f"Uploading image: {image_path}")
+            image_file = gemini_client.files.upload(path=image_path)
+            # For image-to-video, we need to pass the image
+            operation = gemini_client.models.generate_videos(
+                model=model,
+                prompt=prompt,
+                image=image_file
+            )
+        else:
+            # For text-to-video, only model and prompt are needed
+            operation = gemini_client.models.generate_videos(
+                model=model,
+                prompt=prompt
+            )
         
         await ctx.report_progress(progress=10, total=100)
         
@@ -185,10 +175,10 @@ async def generate_video_with_progress(
             "filename": filename,
             "model": model,
             "prompt": prompt,
-            "negative_prompt": negative_prompt,
+            "negative_prompt": None,  # Not supported in current API
             "generation_time": generation_time,
             "file_size": file_size,
-            "aspect_ratio": aspect_ratio
+            "aspect_ratio": "16:9"  # Default for Veo 3
         }
         
     except Exception as e:
@@ -200,20 +190,19 @@ async def generate_video_with_progress(
 async def generate_video(
     prompt: str,
     ctx: Context,
-    model: str = "veo-3.0-generate-preview",
-    negative_prompt: Optional[str] = None,
-    aspect_ratio: str = "16:9"
+    model: str = "veo-3.0-generate-preview"
 ) -> VideoGenerationResponse:
     """Generate a video using Google Veo 3 from a text prompt
     
     Args:
         prompt: Text prompt describing the video to generate
         model: Veo model to use (veo-3.0-generate-preview, veo-3.0-fast-generate-preview, veo-2.0-generate-001)
-        negative_prompt: Optional negative prompt describing what to avoid in the video
-        aspect_ratio: Video aspect ratio (16:9 or 9:16)
     
     Returns:
         VideoGenerationResponse with video path, metadata, and generation info
+    
+    Note: Veo 3 generates 8-second 720p videos with audio. Aspect ratio and other advanced 
+    parameters are not currently supported in the public API.
     """
     
     await ctx.info(f"Starting video generation with prompt: {prompt[:100]}...")
@@ -228,19 +217,11 @@ async def generate_video(
         await ctx.error(f"Invalid model: {model}. Must be one of: {valid_models}")
         raise ValueError(f"Invalid model: {model}")
     
-    # Validate aspect ratio
-    valid_ratios = ["16:9", "9:16"]
-    if aspect_ratio not in valid_ratios:
-        await ctx.error(f"Invalid aspect ratio: {aspect_ratio}. Must be one of: {valid_ratios}")
-        raise ValueError(f"Invalid aspect ratio: {aspect_ratio}")
-    
     try:
         result = await generate_video_with_progress(
             prompt=prompt,
             model=model,
-            ctx=ctx,
-            negative_prompt=negative_prompt,
-            aspect_ratio=aspect_ratio
+            ctx=ctx
         )
         
         await ctx.info(f"Video generated successfully: {result['filename']}")
@@ -256,9 +237,7 @@ async def generate_video_from_image(
     prompt: str,
     image_path: str,
     ctx: Context,
-    model: str = "veo-3.0-generate-preview",
-    negative_prompt: Optional[str] = None,
-    aspect_ratio: str = "16:9"
+    model: str = "veo-3.0-generate-preview"
 ) -> VideoGenerationResponse:
     """Generate a video using Google Veo 3 from an image and text prompt
     
@@ -266,11 +245,12 @@ async def generate_video_from_image(
         prompt: Text prompt describing the video motion/action
         image_path: Path to the starting image file
         model: Veo model to use (veo-3.0-generate-preview, veo-3.0-fast-generate-preview, veo-2.0-generate-001)
-        negative_prompt: Optional negative prompt describing what to avoid in the video
-        aspect_ratio: Video aspect ratio (16:9 or 9:16)
     
     Returns:
         VideoGenerationResponse with video path, metadata, and generation info
+        
+    Note: Veo 3 generates 8-second 720p videos with audio. Advanced parameters like 
+    negative prompts and aspect ratios are not currently supported in the public API.
     """
     
     await ctx.info(f"Starting image-to-video generation: {image_path}")
@@ -299,19 +279,11 @@ async def generate_video_from_image(
         await ctx.error(f"Invalid model: {model}. Must be one of: {valid_models}")
         raise ValueError(f"Invalid model: {model}")
     
-    # Validate aspect ratio
-    valid_ratios = ["16:9", "9:16"]
-    if aspect_ratio not in valid_ratios:
-        await ctx.error(f"Invalid aspect ratio: {aspect_ratio}. Must be one of: {valid_ratios}")
-        raise ValueError(f"Invalid aspect ratio: {aspect_ratio}")
-    
     try:
         result = await generate_video_with_progress(
             prompt=prompt,
             model=model,
             ctx=ctx,
-            negative_prompt=negative_prompt,
-            aspect_ratio=aspect_ratio,
             image_path=full_image_path
         )
         

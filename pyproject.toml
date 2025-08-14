@@ -1,6 +1,6 @@
 [project]
 name = "mcp-veo3"
-version = "1.0.0"
+version = "1.0.1"
 description = "MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation"
 readme = "README.md"
 license = {text = "MIT"}
