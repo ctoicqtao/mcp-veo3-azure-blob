@@ -1,6 +1,6 @@
-# MCP Veo 3 Video Generation Server
+# MCP Veo 3 Video Generation Server with Azure Blob Storage
 
-A Model Context Protocol (MCP) server that provides video generation capabilities using Google's Veo 3 API through the Gemini API. Generate high-quality videos from text prompts or images with realistic motion and audio.
+A Model Context Protocol (MCP) server that provides video generation capabilities using Google's Veo 3 API through the Gemini API, with automatic upload to Azure Blob Storage. Generate high-quality videos from text prompts or images with realistic motion and audio, and store them securely in the cloud.
 
 ## Features
 
@@ -12,6 +12,9 @@ A Model Context Protocol (MCP) server that provides video generation capabilitie
 - ❌ **Negative Prompts**: Specify what to avoid in generated videos
 - 📁 **File Management**: List and manage generated videos
 - ⚡ **Async Processing**: Non-blocking video generation with progress tracking
+- ☁️ **Azure Blob Storage**: Automatic upload to Azure Blob Storage
+- 🔗 **Cloud URLs**: Get direct URLs to your videos in the cloud
+- 🗂️ **Cloud Management**: List, upload, and delete videos in Azure Blob Storage
 
 ## Supported Models
 
@@ -59,11 +62,16 @@ uvx mcp-veo3 --output-dir ~/Videos/Generated
    python setup.py
    ```
 
-3. **Set up API key**:
+3. **Set up API keys and Azure**:
    - Get your Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+   - Get your Azure Storage connection string from [Azure Portal](https://portal.azure.com)
    - Create `.env` file: `cp env_example.txt .env`
-   - Edit `.env` and add your `GEMINI_API_KEY`
-   - Or set environment variable: `export GEMINI_API_KEY='your_key'`
+   - Edit `.env` and add your `GEMINI_API_KEY` and `AZURE_STORAGE_CONNECTION_STRING`
+   - Or set environment variables:
+     ```bash
+     export GEMINI_API_KEY='your_gemini_key'
+     export AZURE_STORAGE_CONNECTION_STRING='your_azure_connection_string'
+     ```
 
 ## Configuration
 
@@ -74,6 +82,11 @@ Create a `.env` file with the following variables:
 ```bash
 # Required
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Azure Blob Storage (Required for cloud upload)
+AZURE_STORAGE_CONNECTION_STRING=your_azure_storage_connection_string_here
+AZURE_BLOB_CONTAINER_NAME=generated-videos
+AZURE_UPLOAD_ENABLED=true
 
 # Optional
 DEFAULT_OUTPUT_DIR=generated_videos
@@ -192,6 +205,44 @@ Get detailed information about a video file.
 **Parameters:**
 - `video_path` (required): Path to the video file
 
+### 5. upload_video_to_azure
+
+Upload a video file to Azure Blob Storage.
+
+**Parameters:**
+- `video_path` (required): Path to the video file (can be relative to output directory)
+- `blob_name` (optional): Custom blob name (defaults to filename)
+
+**Example:**
+```json
+{
+  "video_path": "veo3_video_20241218_230000.mp4",
+  "blob_name": "my_custom_video_name.mp4"
+}
+```
+
+### 6. list_azure_blob_videos
+
+List all videos in Azure Blob Storage container.
+
+**Parameters:** None
+
+**Returns:** List of videos with URLs, sizes, and metadata
+
+### 7. delete_azure_blob_video
+
+Delete a video from Azure Blob Storage.
+
+**Parameters:**
+- `blob_name` (required): Name of the blob to delete
+
+**Example:**
+```json
+{
+  "blob_name": "veo3_video_20241218_230000.mp4"
+}
+```
+
 ## Usage Examples
 
 ### Basic Text-to-Video Generation
@@ -222,6 +273,24 @@ result = await mcp_client.call_tool("generate_video", {
     "prompt": "A stylized animation of a paper airplane flying through a colorful abstract landscape",
     "model": "veo-3.0-fast-generate-preview",
     "aspect_ratio": "16:9"
+})
+```
+
+### Azure Blob Storage Management
+
+```python
+# List videos in Azure Blob Storage
+blob_videos = await mcp_client.call_tool("list_azure_blob_videos", {})
+
+# Upload a specific video to Azure
+upload_result = await mcp_client.call_tool("upload_video_to_azure", {
+    "video_path": "my_video.mp4",
+    "blob_name": "custom_name.mp4"
+})
+
+# Delete a video from Azure Blob Storage
+delete_result = await mcp_client.call_tool("delete_azure_blob_video", {
+    "blob_name": "old_video.mp4"
 })
 ```
 
@@ -296,6 +365,23 @@ uv sync
 pip install -r requirements.txt
 ```
 
+**"Azure upload failed"**
+```bash
+# Check your Azure connection string
+echo $AZURE_STORAGE_CONNECTION_STRING
+
+# Test Azure connection
+python test_azure_blob.py
+
+# Verify container permissions in Azure Portal
+```
+
+**"Azure Storage SDK not available"**
+```bash
+# Install Azure Storage SDK
+pip install azure-storage-blob>=12.19.0
+```
+
 ## Error Handling
 
 The server handles common errors gracefully:
@@ -304,6 +390,9 @@ The server handles common errors gracefully:
 - **File Not Found**: Validation for image paths in image-to-video
 - **Generation Timeout**: Configurable timeout with progress updates
 - **Model Errors**: Fallback error handling with detailed messages
+- **Azure Connection Errors**: Graceful fallback when Azure is not configured
+- **Azure Upload Failures**: Detailed error messages with troubleshooting hints
+- **Container Creation**: Automatic container creation if it doesn't exist
 
 ## Development
 
@@ -315,6 +404,9 @@ pip install pytest pytest-asyncio
 
 # Run tests
 pytest tests/
+
+# Test Azure Blob Storage functionality
+python test_azure_blob.py
 ```
 
 ### Code Formatting
@@ -356,6 +448,17 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - **Issues**: Report bugs and feature requests in the GitHub issues
 
 ## Changelog
+
+### v1.0.2 (Current)
+- **☁️ Azure Blob Storage Integration**: Automatic upload of generated videos to Azure Blob Storage
+- **🔗 Cloud URLs**: Get direct URLs to videos stored in Azure Blob Storage
+- **🗂️ Cloud Management**: New MCP tools for managing videos in Azure Blob Storage
+  - `upload_video_to_azure`: Upload videos to Azure Blob Storage
+  - `list_azure_blob_videos`: List all videos in Azure container
+  - `delete_azure_blob_video`: Delete videos from Azure Blob Storage
+- **⚙️ Enhanced Configuration**: Added Azure-specific environment variables
+- **🧪 Test Suite**: Added comprehensive Azure Blob Storage testing script
+- **📚 Updated Documentation**: Complete Azure setup and usage guide
 
 ### v1.0.1
 - **🔧 API Fix**: Updated to match official Veo 3 API specification

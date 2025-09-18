@@ -1,167 +1,76 @@
-# 🎉 MCP Veo 3 Setup Complete!
+# Setup Complete! 🎉
 
-## ✅ Successfully Configured
+Your MCP Veo 3 Video Generation Server with Azure Blob Storage is now ready to use.
 
-### 📦 Package Structure
-- ✅ **pyproject.toml** - Configured for uv/uvx with proper entry points
-- ✅ **FastMCP Framework** - Updated from standard MCP to FastMCP
-- ✅ **Build System** - Using Hatchling for optimal uv compatibility
-- ✅ **Entry Points** - Both script and MCP server entry points configured
-- ✅ **Dependencies** - All updated to latest versions with uv support
+## What's Been Set Up
 
-### 🚀 Installation Methods
+✅ **FastMCP Framework**: Modern MCP server implementation  
+✅ **Google Veo 3 Integration**: Latest video generation models  
+✅ **Azure Blob Storage**: Automatic cloud upload and management  
+✅ **Progress Tracking**: Real-time generation progress updates  
+✅ **File Management**: Local and cloud video storage  
+✅ **Error Handling**: Comprehensive error management  
 
-#### 1. Direct Usage (Recommended)
-```bash
-# No installation needed - run directly with uvx
-uvx mcp-veo3 --output-dir ~/Videos/Generated
-```
+## Next Steps
 
-#### 2. Development with uv
-```bash
-# Clone and develop locally
-git clone https://github.com/dayongd1/mcp-veo3
-cd mcp-veo3
-uv sync
-uv run mcp-veo3 --output-dir ~/Videos/Generated
-```
-
-#### 3. Global Installation
-```bash
-# Install globally with pip
-pip install mcp-veo3
-mcp-veo3 --output-dir ~/Videos/Generated
-```
-
-### 🔧 MCP Client Configurations
-
-#### Option 1: uvx (Recommended after PyPI publication)
-```json
-{
-  "mcpServers": {
-    "veo3": {
-      "command": "uvx",
-      "args": ["mcp-veo3", "--output-dir", "~/Videos/Generated"],
-      "env": {
-        "GEMINI_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-#### Option 2: uv run (Development)
-```json
-{
-  "mcpServers": {
-    "veo3": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/mcp-veo3", "mcp-veo3", "--output-dir", "~/Videos/Generated"],
-      "env": {
-        "GEMINI_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
-```
-
-## 🧪 Testing Results
-
-### Package Setup Tests: **6/7 PASSED** ✅
-
-- ✅ UV Installation
-- ✅ Package Structure  
-- ✅ pyproject.toml Configuration
-- ✅ UV Sync
-- ✅ UV Build (wheel + source dist created)
-- ✅ UV Run
-- ⚠️ Entry Points (minor issue, doesn't affect functionality)
-
-### Built Artifacts
-```
-dist/
-├── mcp_veo3-1.0.0-py3-none-any.whl    # Wheel distribution
-└── mcp_veo3-1.0.0.tar.gz              # Source distribution
-```
-
-## 📋 Ready for Publication
-
-### PyPI Publication Steps
-1. **Test locally:**
+1. **Configure your API keys**:
    ```bash
-   python test_uv_veo3.py
+   cp env_example.txt .env
+   # Edit .env and add your GEMINI_API_KEY and AZURE_STORAGE_CONNECTION_STRING
    ```
 
-2. **Build and publish:**
+2. **Test Azure connection**:
    ```bash
-   python scripts/publish.py
+   python test_azure_blob.py
    ```
 
-3. **Or manually:**
+3. **Test the server**:
    ```bash
-   uv build
-   uv publish --token $PYPI_API_TOKEN
+   python mcp_veo3_azure_blob.py --output-dir ~/Videos/Generated
    ```
 
-### GitHub Release
-- ✅ GitHub Actions workflow configured (`.github/workflows/publish.yml`)
-- ✅ Automatic PyPI publishing on release
-- ✅ Release assets automatically attached
+4. **Connect to your MCP client** using the configuration in `config.json`
 
-## 🎯 Key Features Implemented
+## Available Tools
 
-### Core Functionality
-- ✅ **Text-to-Video Generation** with Veo 3 models
-- ✅ **Image-to-Video Generation** with motion prompts
-- ✅ **Progress Tracking** with FastMCP Context
-- ✅ **Error Handling** with structured logging
-- ✅ **File Management** with security validation
+### Video Generation
+- `generate_video`: Create videos from text prompts
+- `generate_video_from_image`: Animate images with motion prompts  
 
-### Developer Experience
-- ✅ **uv/uvx Support** for modern Python tooling
-- ✅ **FastMCP Framework** for easier development
-- ✅ **Pydantic Models** for structured responses
-- ✅ **CLI Arguments** for flexible configuration
-- ✅ **Comprehensive Testing** with multiple test scripts
+### Local File Management
+- `list_generated_videos`: Browse your local video collection
+- `get_video_info`: Get detailed video metadata
 
-### Distribution
-- ✅ **PyPI Ready** with proper package metadata
-- ✅ **GitHub Actions** for automated publishing
-- ✅ **Multiple Installation Methods** for different use cases
-- ✅ **MCP Entry Points** for framework integration
+### Azure Blob Storage
+- `upload_video_to_azure`: Upload videos to Azure Blob Storage
+- `list_azure_blob_videos`: List videos in Azure container
+- `delete_azure_blob_video`: Delete videos from Azure storage
 
-## 🚀 Next Steps
+## Key Features
 
-1. **Set API Key:**
-   ```bash
-   export GEMINI_API_KEY='your_gemini_api_key'
-   ```
+🎬 **Automatic Upload**: Videos are automatically uploaded to Azure after generation  
+🔗 **Cloud URLs**: Get direct links to your videos in Azure Blob Storage  
+☁️ **Cloud Management**: Full CRUD operations for videos in the cloud  
+🔄 **Fallback Support**: Works with or without Azure configuration  
 
-2. **Test Locally:**
-   ```bash
-   cd mcp-veo3
-   python test_uv_veo3.py
-   ```
+## Azure Setup
 
-3. **Publish to PyPI:**
-   ```bash
-   python scripts/publish.py
-   ```
+1. Create an Azure Storage Account in the [Azure Portal](https://portal.azure.com)
+2. Get your connection string from Storage Account → Access keys
+3. Add it to your `.env` file as `AZURE_STORAGE_CONNECTION_STRING`
+4. The container will be created automatically on first upload
 
-4. **Use Globally:**
-   ```bash
-   uvx mcp-veo3 --output-dir ~/Videos/Generated
-   ```
+## Support
 
-## 📚 Documentation
+- 📖 **Documentation**: See README.md for detailed usage
+- 🧪 **Testing**: Run `python test_azure_blob.py` to verify Azure setup
+- 🐛 **Issues**: Report problems on GitHub
+- 💡 **Examples**: Check the examples/ directory
 
-- **README.md** - Complete usage documentation
-- **examples/** - Test scripts and examples
-- **API Documentation** - Inline with FastMCP decorators
-- **Troubleshooting** - Common issues and solutions
+Happy video generating with cloud storage! 🎬☁️
 
 ---
 
 **Status: ✅ READY FOR PRODUCTION**
 
-The MCP Veo 3 package is now fully configured for uv/uvx usage and PyPI publication, following the same patterns as the proven mcp-s3 implementation!
+The MCP Veo 3 package with Azure Blob Storage integration is now fully configured and ready to use!

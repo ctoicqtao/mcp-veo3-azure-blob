@@ -20,6 +20,13 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 try:
+    from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+except ImportError:
+    BlobServiceClient = None
+    BlobClient = None
+    ContainerClient = None
+
+try:
     from google import genai
     from google.genai import types as genai_types
 except ImportError:
@@ -41,6 +48,11 @@ OUTPUT_DIR = os.path.abspath(os.path.expanduser(args.output_dir))
 API_KEY = args.api_key or os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     raise ValueError("Gemini API key must be provided via --api-key argument or GEMINI_API_KEY in .env file")
+
+# Azure Blob Storage configuration
+AZURE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+AZURE_CONTAINER_NAME = os.getenv("AZURE_BLOB_CONTAINER_NAME", "generated-videos")
+AZURE_UPLOAD_ENABLED = os.getenv("AZURE_UPLOAD_ENABLED", "true").lower() == "true"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +77,8 @@ class VideoGenerationResponse(BaseModel):
     generation_time: float
     file_size: int
     aspect_ratio: str
+    azure_blob_url: Optional[str] = None
+    azure_upload_success: bool = False
 
 
 class VideoListResponse(BaseModel):
@@ -79,12 +93,126 @@ class VideoInfoResponse(BaseModel):
     size: int
     created: str
     modified: str
+    azure_blob_url: Optional[str] = None
+
+
+class AzureBlobUploadResponse(BaseModel):
+    success: bool
+    blob_url: Optional[str] = None
+    error_message: Optional[str] = None
+    upload_time: float
+    file_size: int
+
+
+class AzureBlobListResponse(BaseModel):
+    blobs: list[dict]
+    total_count: int
+    container_name: str
 def safe_join(root: str, user_path: str) -> str:
     """Safely join paths and prevent directory traversal"""
     abs_path = os.path.abspath(os.path.join(root, user_path))
     if not abs_path.startswith(root):
         raise ValueError("Path escapes allowed root")
     return abs_path
+
+
+def get_azure_blob_client() -> Optional[BlobServiceClient]:
+    """Initialize Azure Blob Service Client"""
+    if not BlobServiceClient or not AZURE_CONNECTION_STRING:
+        return None
+    
+    try:
+        return BlobServiceClient.from_connection_string(AZURE_CONNECTION_STRING)
+    except Exception as e:
+        logger.error(f"Failed to initialize Azure Blob client: {str(e)}")
+        return None
+
+
+async def upload_to_azure_blob(
+    file_path: str, 
+    blob_name: str, 
+    ctx: Context
+) -> AzureBlobUploadResponse:
+    """Upload a file to Azure Blob Storage"""
+    start_time = time.time()
+    
+    if not AZURE_UPLOAD_ENABLED:
+        await ctx.info("Azure upload is disabled")
+        return AzureBlobUploadResponse(
+            success=False,
+            error_message="Azure upload is disabled",
+            upload_time=0,
+            file_size=0
+        )
+    
+    if not BlobServiceClient:
+        await ctx.error("Azure Storage SDK not available. Install: pip install azure-storage-blob")
+        return AzureBlobUploadResponse(
+            success=False,
+            error_message="Azure Storage SDK not available",
+            upload_time=0,
+            file_size=0
+        )
+    
+    if not AZURE_CONNECTION_STRING:
+        await ctx.error("Azure connection string not configured")
+        return AzureBlobUploadResponse(
+            success=False,
+            error_message="Azure connection string not configured",
+            upload_time=0,
+            file_size=0
+        )
+    
+    try:
+        blob_service_client = get_azure_blob_client()
+        if not blob_service_client:
+            raise Exception("Failed to initialize Azure Blob client")
+        
+        # Create container if it doesn't exist
+        container_client = blob_service_client.get_container_client(AZURE_CONTAINER_NAME)
+        try:
+            container_client.create_container()
+            await ctx.info(f"Created Azure container: {AZURE_CONTAINER_NAME}")
+        except Exception:
+            # Container already exists, which is fine
+            pass
+        
+        # Upload the file
+        await ctx.info(f"Uploading {blob_name} to Azure Blob Storage...")
+        
+        with open(file_path, "rb") as data:
+            blob_client = blob_service_client.get_blob_client(
+                container=AZURE_CONTAINER_NAME, 
+                blob=blob_name
+            )
+            blob_client.upload_blob(data, overwrite=True)
+        
+        # Get the blob URL
+        blob_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{AZURE_CONTAINER_NAME}/{blob_name}"
+        
+        file_size = os.path.getsize(file_path)
+        upload_time = time.time() - start_time
+        
+        await ctx.info(f"Successfully uploaded to Azure Blob: {blob_url}")
+        
+        return AzureBlobUploadResponse(
+            success=True,
+            blob_url=blob_url,
+            upload_time=upload_time,
+            file_size=file_size
+        )
+        
+    except Exception as e:
+        upload_time = time.time() - start_time
+        error_msg = f"Azure upload failed: {str(e)}"
+        await ctx.error(error_msg)
+        
+        return AzureBlobUploadResponse(
+            success=False,
+            error_message=error_msg,
+            upload_time=upload_time,
+            file_size=os.path.getsize(file_path) if os.path.exists(file_path) else 0
+        )
 
 
 async def generate_video_with_progress(
@@ -163,12 +291,28 @@ async def generate_video_with_progress(
         gemini_client.files.download(file=generated_video.video)
         generated_video.video.save(str(output_path))
         
-        await ctx.report_progress(progress=100, total=100)
+        await ctx.report_progress(progress=95, total=100)
         
         file_size = output_path.stat().st_size if output_path.exists() else 0
         generation_time = time.time() - start_time
         
         await ctx.info(f"Video generation completed in {generation_time:.1f} seconds")
+        
+        # Upload to Azure Blob Storage if enabled
+        azure_blob_url = None
+        azure_upload_success = False
+        
+        if AZURE_UPLOAD_ENABLED and output_path.exists():
+            await ctx.info("Uploading video to Azure Blob Storage...")
+            upload_result = await upload_to_azure_blob(
+                file_path=str(output_path),
+                blob_name=filename,
+                ctx=ctx
+            )
+            azure_upload_success = upload_result.success
+            azure_blob_url = upload_result.blob_url
+        
+        await ctx.report_progress(progress=100, total=100)
         
         return {
             "video_path": str(output_path),
@@ -178,7 +322,9 @@ async def generate_video_with_progress(
             "negative_prompt": None,  # Not supported in current API
             "generation_time": generation_time,
             "file_size": file_size,
-            "aspect_ratio": "16:9"  # Default for Veo 3
+            "aspect_ratio": "16:9",  # Default for Veo 3
+            "azure_blob_url": azure_blob_url,
+            "azure_upload_success": azure_upload_success
         }
         
     except Exception as e:
@@ -396,6 +542,179 @@ async def get_video_info(video_path: str, ctx: Context) -> VideoInfoResponse:
         created=created_time,
         modified=modified_time
     )
+
+
+@mcp.tool()
+async def upload_video_to_azure(
+    video_path: str,
+    ctx: Context,
+    blob_name: Optional[str] = None
+) -> AzureBlobUploadResponse:
+    """Upload a video file to Azure Blob Storage
+    
+    Args:
+        video_path: Path to the video file (can be relative to output directory)
+        blob_name: Optional custom blob name (defaults to filename)
+    
+    Returns:
+        AzureBlobUploadResponse with upload status and blob URL
+    """
+    
+    await ctx.info(f"Uploading video to Azure Blob: {video_path}")
+    
+    if not video_path.strip():
+        await ctx.error("Video path cannot be empty")
+        raise ValueError("Video path cannot be empty")
+    
+    # Resolve video path (allow relative paths within output directory for security)
+    if not os.path.isabs(video_path):
+        full_video_path = safe_join(OUTPUT_DIR, video_path)
+    else:
+        full_video_path = video_path
+    
+    video_file = Path(full_video_path)
+    
+    if not video_file.exists():
+        await ctx.error(f"Video file not found: {full_video_path}")
+        raise ValueError(f"Video file not found: {full_video_path}")
+    
+    # Use custom blob name or default to filename
+    if not blob_name:
+        blob_name = video_file.name
+    
+    return await upload_to_azure_blob(
+        file_path=str(video_file),
+        blob_name=blob_name,
+        ctx=ctx
+    )
+
+
+@mcp.tool()
+async def list_azure_blob_videos(ctx: Context) -> AzureBlobListResponse:
+    """List all videos in Azure Blob Storage container
+    
+    Returns:
+        AzureBlobListResponse with list of blob videos and metadata
+    """
+    
+    await ctx.info(f"Listing videos in Azure Blob container: {AZURE_CONTAINER_NAME}")
+    
+    if not BlobServiceClient:
+        await ctx.error("Azure Storage SDK not available. Install: pip install azure-storage-blob")
+        raise ValueError("Azure Storage SDK not available")
+    
+    if not AZURE_CONNECTION_STRING:
+        await ctx.error("Azure connection string not configured")
+        raise ValueError("Azure connection string not configured")
+    
+    try:
+        blob_service_client = get_azure_blob_client()
+        if not blob_service_client:
+            raise Exception("Failed to initialize Azure Blob client")
+        
+        container_client = blob_service_client.get_container_client(AZURE_CONTAINER_NAME)
+        
+        # List all blobs in the container
+        blobs = []
+        try:
+            blob_list = container_client.list_blobs()
+            for blob in blob_list:
+                # Filter for video files
+                if blob.name.lower().endswith(('.mp4', '.mov', '.avi', '.mkv')):
+                    blob_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{AZURE_CONTAINER_NAME}/{blob.name}"
+                    blobs.append({
+                        "name": blob.name,
+                        "url": blob_url,
+                        "size": blob.size,
+                        "size_mb": round(blob.size / 1024 / 1024, 1) if blob.size else 0,
+                        "created": blob.creation_time.isoformat() if blob.creation_time else None,
+                        "modified": blob.last_modified.isoformat() if blob.last_modified else None,
+                        "content_type": blob.content_settings.content_type if blob.content_settings else None
+                    })
+        except Exception as e:
+            if "ContainerNotFound" in str(e):
+                await ctx.info(f"Container {AZURE_CONTAINER_NAME} does not exist yet")
+                return AzureBlobListResponse(
+                    blobs=[],
+                    total_count=0,
+                    container_name=AZURE_CONTAINER_NAME
+                )
+            else:
+                raise e
+        
+        # Sort by modification time (newest first)
+        blobs.sort(key=lambda x: x.get('modified', ''), reverse=True)
+        
+        await ctx.info(f"Found {len(blobs)} video files in Azure Blob Storage")
+        
+        return AzureBlobListResponse(
+            blobs=blobs,
+            total_count=len(blobs),
+            container_name=AZURE_CONTAINER_NAME
+        )
+        
+    except Exception as e:
+        await ctx.error(f"Failed to list Azure Blob videos: {str(e)}")
+        raise ValueError(f"Failed to list Azure Blob videos: {str(e)}")
+
+
+@mcp.tool()
+async def delete_azure_blob_video(
+    blob_name: str,
+    ctx: Context
+) -> dict:
+    """Delete a video from Azure Blob Storage
+    
+    Args:
+        blob_name: Name of the blob to delete
+    
+    Returns:
+        Dictionary with deletion status
+    """
+    
+    await ctx.info(f"Deleting video from Azure Blob: {blob_name}")
+    
+    if not blob_name.strip():
+        await ctx.error("Blob name cannot be empty")
+        raise ValueError("Blob name cannot be empty")
+    
+    if not BlobServiceClient:
+        await ctx.error("Azure Storage SDK not available. Install: pip install azure-storage-blob")
+        raise ValueError("Azure Storage SDK not available")
+    
+    if not AZURE_CONNECTION_STRING:
+        await ctx.error("Azure connection string not configured")
+        raise ValueError("Azure connection string not configured")
+    
+    try:
+        blob_service_client = get_azure_blob_client()
+        if not blob_service_client:
+            raise Exception("Failed to initialize Azure Blob client")
+        
+        blob_client = blob_service_client.get_blob_client(
+            container=AZURE_CONTAINER_NAME,
+            blob=blob_name
+        )
+        
+        # Check if blob exists
+        if not blob_client.exists():
+            await ctx.error(f"Blob not found: {blob_name}")
+            raise ValueError(f"Blob not found: {blob_name}")
+        
+        # Delete the blob
+        blob_client.delete_blob()
+        
+        await ctx.info(f"Successfully deleted blob: {blob_name}")
+        
+        return {
+            "success": True,
+            "blob_name": blob_name,
+            "message": f"Successfully deleted {blob_name}"
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Failed to delete Azure Blob video: {str(e)}")
+        raise ValueError(f"Failed to delete Azure Blob video: {str(e)}")
 
 
 def main():

@@ -25,6 +25,18 @@
     {
       "name": "get_video_info",
       "description": "Get information about a generated video file"
+    },
+    {
+      "name": "upload_video_to_azure",
+      "description": "Upload a video file to Azure Blob Storage"
+    },
+    {
+      "name": "list_azure_blob_videos",
+      "description": "List all videos in Azure Blob Storage container"
+    },
+    {
+      "name": "delete_azure_blob_video",
+      "description": "Delete a video from Azure Blob Storage"
     }
   ],
   "models": {
@@ -43,6 +55,9 @@
     "max_duration": "8 seconds",
     "resolution": "720p",
     "progress_tracking": true,
-    "structured_responses": true
+    "structured_responses": true,
+    "azure_blob_storage": true,
+    "automatic_upload": true,
+    "cloud_storage_management": true
   }
 }
