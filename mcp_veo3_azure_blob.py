@@ -337,7 +337,7 @@ async def generate_video(
     prompt: str,
     ctx: Context,
     model: str = "veo-3.0-generate-preview"
-) -> VideoGenerationResponse:
+) -> dict:
     """Generate a video using Google Veo 3 from a text prompt
     
     Args:
@@ -345,7 +345,7 @@ async def generate_video(
         model: Veo model to use (veo-3.0-generate-preview, veo-3.0-fast-generate-preview, veo-2.0-generate-001)
     
     Returns:
-        VideoGenerationResponse with video path, metadata, and generation info
+        dict: JSON containing the Azure Blob Storage video URL
     
     Note: Veo 3 generates 8-second 720p videos with audio. Aspect ratio and other advanced 
     parameters are not currently supported in the public API.
@@ -372,7 +372,10 @@ async def generate_video(
         
         await ctx.info(f"Video generated successfully: {result['filename']}")
         
-        return VideoGenerationResponse(**result)
+        # Return simple JSON with only Azure video URL
+        return {
+            "azure_video_url": result.get('azure_blob_url')
+        }
         
     except Exception as e:
         await ctx.error(f"Video generation failed: {str(e)}")
@@ -384,7 +387,7 @@ async def generate_video_from_image(
     image_path: str,
     ctx: Context,
     model: str = "veo-3.0-generate-preview"
-) -> VideoGenerationResponse:
+) -> dict:
     """Generate a video using Google Veo 3 from an image and text prompt
     
     Args:
@@ -393,7 +396,7 @@ async def generate_video_from_image(
         model: Veo model to use (veo-3.0-generate-preview, veo-3.0-fast-generate-preview, veo-2.0-generate-001)
     
     Returns:
-        VideoGenerationResponse with video path, metadata, and generation info
+        dict: JSON containing the Azure Blob Storage video URL
         
     Note: Veo 3 generates 8-second 720p videos with audio. Advanced parameters like 
     negative prompts and aspect ratios are not currently supported in the public API.
@@ -435,7 +438,10 @@ async def generate_video_from_image(
         
         await ctx.info(f"Image-to-video generation successful: {result['filename']}")
         
-        return VideoGenerationResponse(**result)
+        # Return simple JSON with only Azure video URL
+        return {
+            "azure_video_url": result.get('azure_blob_url')
+        }
         
     except Exception as e:
         await ctx.error(f"Image-to-video generation failed: {str(e)}")
