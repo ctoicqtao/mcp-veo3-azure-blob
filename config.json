@@ -1,7 +1,7 @@
 {
-  "name": "mcp-veo3",
+  "name": "mcp-veo3-azure-blob",
   "version": "1.0.0",
-  "description": "MCP Server for Google Veo 3 Video Generation",
+  "description": "MCP Server for Google Veo 3 Video Generation and Azure Blob Upload",
   "server": {
     "command": "python",
     "args": ["mcp_veo3.py", "--output-dir", "~/Videos/Generated"],

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation
+MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation and Azure Blob Upload
 Usage:
-  python mcp_veo3.py --output-dir ~/Videos/Generated
+  python mcp_veo3_azure_blob.py --output-dir ~/Videos/Generated
 """
 
 import argparse
@@ -44,10 +44,10 @@ if not API_KEY:
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("mcp-veo3")
+logger = logging.getLogger("mcp-veo3-azure-blob")
 
 # Initialize FastMCP
-mcp = FastMCP("MCP Veo 3 Video Generator")
+mcp = FastMCP("MCP Veo 3 Video Generator with Azure Blob Upload")
 
 # Initialize Gemini client
 if not genai:

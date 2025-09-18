@@ -1,15 +1,15 @@
 [project]
-name = "mcp-veo3"
-version = "1.0.1"
-description = "MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation"
+name = "mcp-veo3-azure-blob"
+version = "1.0.2"
+description = "MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation and Azure Blob Upload"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Dayong Huang", email = "dayong.d1@gmail.com"}
+    {name = "Tom Chen", email = "ctoicqtao@gmail.com"}
 ]
 maintainers = [
-    {name = "Dayong Huang", email = "dayong.d1@gmail.com"}
+    {name = "Tom Chen", email = "ctoicqtao@gmail.com"}
 ]
 keywords = ["mcp", "video", "generation", "ai", "veo", "gemini", "google", "model-context-protocol", "fastmcp"]
 classifiers = [
@@ -35,17 +35,17 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-veo3 = "mcp_veo3:main"
+mcp-veo3-azure-blob = "mcp_veo3_azure_blob:main"
 
 [project.entry-points."mcp.servers"]
-veo3 = "mcp_veo3:main"
+veo3 = "mcp_veo3_azure_blob:main"
 
 [project.urls]
-Homepage = "https://github.com/dayongd1/mcp-veo3"
-Repository = "https://github.com/dayongd1/mcp-veo3"
-Documentation = "https://github.com/dayongd1/mcp-veo3/blob/main/README.md"
-"Bug Tracker" = "https://github.com/dayongd1/mcp-veo3/issues"
-Changelog = "https://github.com/dayongd1/mcp-veo3/releases"
+Homepage = "https://github.com/ctoicqtao/mcp-veo3-azure-blob"
+Repository = "https://github.com/ctoicqtao/mcp-veo3-azure-blob"
+Documentation = "https://github.com/ctoicqtao/mcp-veo3-azure-blob/blob/main/README.md"
+"Bug Tracker" = "https://github.com/ctoicqtao/mcp-veo3-azure-blob/issues"
+Changelog = "https://github.com/ctoicqtao/mcp-veo3-azure-blob/releases"
 
 [build-system]
 requires = ["hatchling"]
@@ -53,7 +53,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "mcp_veo3.py",
+    "mcp_veo3_azure_blob.py",
     "__init__.py",
     "README.md",
     "LICENSE",
@@ -63,7 +63,7 @@ include = [
 
 [tool.hatch.build.targets.wheel]
 include = [
-    "mcp_veo3.py",
+    "mcp_veo3_azure_blob.py",
     "__init__.py",
 ]
 
