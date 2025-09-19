@@ -1,6 +1,6 @@
 [project]
 name = "mcp-veo3-azure-blob"
-version = "1.0.6"
+version = "1.0.17"
 description = "MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation and Azure Blob Upload"
 readme = "README.md"
 license = {text = "MIT"}
@@ -33,6 +33,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "azure-storage-blob>=12.19.0",
     "Pillow>=10.0.0",
+    "aiohttp>=3.8.0",
 ]
 
 [project.scripts]

@@ -13,6 +13,8 @@ import os
 import time
 import tempfile
 import aiohttp
+import base64
+import mimetypes
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -338,18 +340,57 @@ async def generate_video_with_progress(
         await ctx.report_progress(progress=5, total=100)
         
         if image_path and os.path.exists(image_path):
-            await ctx.info(f"Uploading image: {image_path}")
-            logger.info(f"[{request_id}] Uploading image file: {image_path}")
-            image_file = gemini_client.files.upload(path=image_path)
-            logger.info(f"[{request_id}] Image uploaded, file URI: {image_file.uri}")
+            await ctx.info(f"Processing image: {image_path}")
+            logger.info(f"[{request_id}] Processing image file: {image_path}")
             
-            # For image-to-video, we need to pass the image
+            # Read image file as bytes
+            logger.info(f"[{request_id}] Reading image file as bytes")
+            with open(image_path, 'rb') as f:
+                image_bytes = f.read()
+            
+            # Get MIME type with better detection
+            mime_type, _ = mimetypes.guess_type(image_path)
+            
+            # If mimetypes fails, try to detect from file extension
+            if not mime_type:
+                ext = os.path.splitext(image_path)[1].lower()
+                mime_type_map = {
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.png': 'image/png',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp',
+                    '.bmp': 'image/bmp',
+                    '.tiff': 'image/tiff',
+                    '.tif': 'image/tiff'
+                }
+                mime_type = mime_type_map.get(ext, 'image/jpeg')
+            
+            # Ensure it's an image MIME type
+            if not mime_type.startswith('image/'):
+                mime_type = 'image/jpeg'  # Default fallback
+            
+            logger.info(f"[{request_id}] Image loaded successfully")
+            logger.info(f"[{request_id}] - MIME type: {mime_type}")
+            logger.info(f"[{request_id}] - File size: {len(image_bytes)} bytes")
+            
+            # Validate MIME type is supported
+            supported_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp']
+            if mime_type not in supported_types:
+                logger.warning(f"[{request_id}] Unusual MIME type: {mime_type}, using image/jpeg instead")
+                mime_type = 'image/jpeg'
+            
+            # Create image object using GenAI types
+            image_obj = genai_types.Image(image_bytes=image_bytes, mime_type=mime_type)
+            
+            # For image-to-video, we need to pass the image object
             logger.info(f"[{request_id}] Calling Gemini API for image-to-video generation")
-            logger.info(f"[{request_id}] API Request - Model: {model}, Prompt: {prompt}, Image: {image_file.uri}")
+            logger.info(f"[{request_id}] API Request - Model: {model}, Prompt: {prompt}")
+            
             operation = gemini_client.models.generate_videos(
                 model=model,
                 prompt=prompt,
-                image=image_file
+                image=image_obj
             )
         else:
             # For text-to-video, only model and prompt are needed
@@ -412,6 +453,7 @@ async def generate_video_with_progress(
         # Download the video
         await ctx.info(f"Downloading video to: {output_path}")
         logger.info(f"[{request_id}] Downloading video from Gemini to local path: {output_path}")
+        # Download the video file
         gemini_client.files.download(file=generated_video.video)
         generated_video.video.save(str(output_path))
         
