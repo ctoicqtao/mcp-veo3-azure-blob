@@ -11,9 +11,12 @@ import json
 import logging
 import os
 import time
+import tempfile
+import aiohttp
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+from urllib.parse import urlparse
 
 from fastmcp import FastMCP, Context
 from pydantic import BaseModel
@@ -114,6 +117,79 @@ def safe_join(root: str, user_path: str) -> str:
     if not abs_path.startswith(root):
         raise ValueError("Path escapes allowed root")
     return abs_path
+
+
+def is_url(path: str) -> bool:
+    """Check if a path is a URL"""
+    try:
+        result = urlparse(path)
+        return all([result.scheme, result.netloc])
+    except Exception:
+        return False
+
+
+async def download_image_from_url(url: str, ctx: Context) -> str:
+    """Download image from URL to a temporary file
+    
+    Args:
+        url: Image URL to download
+        ctx: MCP context for logging
+        
+    Returns:
+        str: Path to the downloaded temporary file
+        
+    Raises:
+        ValueError: If download fails or URL is invalid
+    """
+    if not is_url(url):
+        raise ValueError(f"Invalid URL: {url}")
+    
+    await ctx.info(f"Downloading image from URL: {url}")
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    raise ValueError(f"Failed to download image: HTTP {response.status}")
+                
+                # Get content type to determine file extension
+                content_type = response.headers.get('content-type', '').lower()
+                if 'image' not in content_type:
+                    await ctx.info(f"Warning: Content-Type is '{content_type}', not an image type")
+                
+                # Determine file extension
+                if 'jpeg' in content_type or 'jpg' in content_type:
+                    ext = '.jpg'
+                elif 'png' in content_type:
+                    ext = '.png'
+                elif 'gif' in content_type:
+                    ext = '.gif'
+                elif 'webp' in content_type:
+                    ext = '.webp'
+                else:
+                    # Try to get extension from URL
+                    parsed_url = urlparse(url)
+                    path_ext = os.path.splitext(parsed_url.path)[1].lower()
+                    if path_ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']:
+                        ext = path_ext
+                    else:
+                        ext = '.jpg'  # Default to jpg
+                
+                # Create temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
+                    temp_path = temp_file.name
+                    
+                    # Download and write content
+                    async for chunk in response.content.iter_chunked(8192):
+                        temp_file.write(chunk)
+                
+                await ctx.info(f"Image downloaded successfully to: {temp_path}")
+                return temp_path
+                
+    except aiohttp.ClientError as e:
+        raise ValueError(f"Network error downloading image: {str(e)}")
+    except Exception as e:
+        raise ValueError(f"Failed to download image: {str(e)}")
 
 
 def get_azure_blob_client() -> Optional[BlobServiceClient]:
@@ -483,7 +559,7 @@ async def generate_video_from_image(
     
     Args:
         prompt: Text prompt describing the video motion/action
-        image_path: Path to the starting image file
+        image_path: Path to the starting image file or URL to an online image
         model: Veo model to use (veo-3.0-generate-preview, veo-3.0-fast-generate-preview, veo-2.0-generate-001)
     
     Returns:
@@ -503,23 +579,33 @@ async def generate_video_from_image(
         await ctx.error("Image path cannot be empty")
         raise ValueError("Image path cannot be empty")
     
-    # Resolve image path (allow relative paths within output directory for security)
-    if not os.path.isabs(image_path):
-        full_image_path = safe_join(OUTPUT_DIR, image_path)
-    else:
-        full_image_path = image_path
-    
-    if not os.path.exists(full_image_path):
-        await ctx.error(f"Image file not found: {full_image_path}")
-        raise ValueError(f"Image file not found: {full_image_path}")
-    
-    # Validate model
-    valid_models = ["veo-3.0-generate-preview", "veo-3.0-fast-generate-preview", "veo-2.0-generate-001"]
-    if model not in valid_models:
-        await ctx.error(f"Invalid model: {model}. Must be one of: {valid_models}")
-        raise ValueError(f"Invalid model: {model}")
+    # Handle URL or local file path
+    temp_image_path = None
+    full_image_path = None
     
     try:
+        if is_url(image_path):
+            # Download image from URL to temporary file
+            full_image_path = await download_image_from_url(image_path, ctx)
+            temp_image_path = full_image_path  # Keep track for cleanup
+        else:
+            # Handle local file path (allow relative paths within output directory for security)
+            if not os.path.isabs(image_path):
+                full_image_path = safe_join(OUTPUT_DIR, image_path)
+            else:
+                full_image_path = image_path
+            
+            if not os.path.exists(full_image_path):
+                await ctx.error(f"Image file not found: {full_image_path}")
+                raise ValueError(f"Image file not found: {full_image_path}")
+        
+        # Validate model
+        valid_models = ["veo-3.0-generate-preview", "veo-3.0-fast-generate-preview", "veo-2.0-generate-001"]
+        if model not in valid_models:
+            await ctx.error(f"Invalid model: {model}. Must be one of: {valid_models}")
+            raise ValueError(f"Invalid model: {model}")
+        
+        # Generate video
         result = await generate_video_with_progress(
             prompt=prompt,
             model=model,
@@ -537,6 +623,15 @@ async def generate_video_from_image(
     except Exception as e:
         await ctx.error(f"Image-to-video generation failed: {str(e)}")
         raise ValueError(f"Image-to-video generation failed: {str(e)}")
+    
+    finally:
+        # Clean up temporary image file if it was downloaded from URL
+        if temp_image_path and os.path.exists(temp_image_path):
+            try:
+                os.unlink(temp_image_path)
+                await ctx.info(f"Cleaned up temporary image file: {temp_image_path}")
+            except Exception as e:
+                await ctx.info(f"Warning: Failed to clean up temporary file {temp_image_path}: {str(e)}")
 
 
 @mcp.tool()

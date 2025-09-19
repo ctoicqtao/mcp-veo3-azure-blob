@@ -5,7 +5,7 @@ A Model Context Protocol (MCP) server that provides video generation capabilitie
 ## Features
 
 - 🎬 **Text-to-Video**: Generate videos from descriptive text prompts
-- 🖼️ **Image-to-Video**: Animate static images with motion prompts
+- 🖼️ **Image-to-Video**: Animate static images with motion prompts (supports local files and online URLs)
 - 🎵 **Audio Generation**: Native audio generation with Veo 3 models
 - 🎨 **Multiple Models**: Support for Veo 3, Veo 3 Fast, and Veo 2
 - 📐 **Aspect Ratios**: Widescreen (16:9) and portrait (9:16) support
@@ -172,21 +172,31 @@ Generate a video from a text prompt.
 
 ### 2. generate_video_from_image
 
-Generate a video from a starting image and motion prompt.
+Generate a video from a starting image and motion prompt. Supports both local image files and online image URLs.
 
 **Parameters:**
 - `prompt` (required): Text description of the desired motion/action
-- `image_path` (required): Path to the starting image file
+- `image_path` (required): Path to local image file OR URL to online image
 - `model` (optional): Model to use (default: veo-3.0-generate-preview)
-- `negative_prompt` (optional): What to avoid in the video
-- `aspect_ratio` (optional): 16:9 or 9:16 (default: 16:9)
-- `output_dir` (optional): Directory to save videos (default: generated_videos)
 
-**Example:**
+**Supported Image Sources:**
+- **Local files**: `./images/photo.jpg`, `/absolute/path/image.png`
+- **Online URLs**: `https://example.com/image.jpg`, `http://site.com/photo.png`
+
+**Example with local file:**
 ```json
 {
   "prompt": "The person in the image starts walking forward with a confident stride",
   "image_path": "./images/person_standing.jpg",
+  "model": "veo-3.0-generate-preview"
+}
+```
+
+**Example with online URL:**
+```json
+{
+  "prompt": "The cat in the image starts playing with a ball of yarn",
+  "image_path": "https://example.com/images/cat_sitting.jpg",
   "model": "veo-3.0-generate-preview"
 }
 ```
@@ -255,14 +265,23 @@ result = await mcp_client.call_tool("generate_video", {
 })
 ```
 
-### Image-to-Video with Negative Prompt
+### Image-to-Video with Local File
 
 ```python
 result = await mcp_client.call_tool("generate_video_from_image", {
     "prompt": "The ocean waves gently crash against the shore",
     "image_path": "./beach_scene.jpg",
-    "negative_prompt": "people, buildings, artificial structures",
-    "aspect_ratio": "16:9"
+    "model": "veo-3.0-generate-preview"
+})
+```
+
+### Image-to-Video with Online URL
+
+```python
+result = await mcp_client.call_tool("generate_video_from_image", {
+    "prompt": "The flowers in the garden sway gently in the breeze",
+    "image_path": "https://example.com/images/garden_flowers.jpg",
+    "model": "veo-3.0-generate-preview"
 })
 ```
 

@@ -12,6 +12,7 @@ python-dotenv>=1.0.0  # For .env file support
 azure-storage-blob>=12.19.0  # For Azure Blob Storage integration
 Pillow>=10.0.0       # For image processing
 requests>=2.31.0     # For HTTP requests
+aiohttp>=3.8.0       # For async HTTP requests (image downloads)
 
 # Development dependencies (optional)
 pytest>=7.0.0
