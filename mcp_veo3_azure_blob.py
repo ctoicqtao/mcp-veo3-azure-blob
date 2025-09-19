@@ -318,7 +318,7 @@ async def generate_video_with_progress(
     ctx: Context,
     image_path: Optional[str] = None,
     poll_interval: int = 10,
-    max_poll_time: int = 900  # Increased to 15 minutes
+    max_poll_time: int = 2700  # Increased to 45 minutes (3x original)
 ) -> dict:
     """Generate a video using Veo 3 with progress tracking"""
     

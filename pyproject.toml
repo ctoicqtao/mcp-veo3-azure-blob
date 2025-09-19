@@ -1,6 +1,6 @@
 [project]
 name = "mcp-veo3-azure-blob"
-version = "1.0.17"
+version = "1.0.18"
 description = "MCP Veo 3 Video Generator - A Model Context Protocol server for Veo 3 video generation and Azure Blob Upload"
 readme = "README.md"
 license = {text = "MIT"}
