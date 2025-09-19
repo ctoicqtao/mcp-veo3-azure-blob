@@ -135,8 +135,15 @@ async def upload_to_azure_blob(
 ) -> AzureBlobUploadResponse:
     """Upload a file to Azure Blob Storage"""
     start_time = time.time()
+    upload_id = f"azure_{int(start_time)}"
+    
+    logger.info(f"[{upload_id}] Starting Azure Blob upload")
+    logger.info(f"[{upload_id}] File: {file_path}")
+    logger.info(f"[{upload_id}] Blob name: {blob_name}")
+    logger.info(f"[{upload_id}] Container: {AZURE_CONTAINER_NAME}")
     
     if not AZURE_UPLOAD_ENABLED:
+        logger.info(f"[{upload_id}] Azure upload is disabled")
         await ctx.info("Azure upload is disabled")
         return AzureBlobUploadResponse(
             success=False,
@@ -193,6 +200,12 @@ async def upload_to_azure_blob(
         file_size = os.path.getsize(file_path)
         upload_time = time.time() - start_time
         
+        logger.info(f"[{upload_id}] ✅ Azure upload completed successfully!")
+        logger.info(f"[{upload_id}] 🔗 Blob URL: {blob_url}")
+        logger.info(f"[{upload_id}] Upload time: {upload_time:.2f}s")
+        logger.info(f"[{upload_id}] File size: {file_size} bytes ({file_size/1024/1024:.1f} MB)")
+        logger.info(f"[{upload_id}] Upload speed: {(file_size/1024/1024)/upload_time:.1f} MB/s")
+        
         await ctx.info(f"Successfully uploaded to Azure Blob: {blob_url}")
         
         return AzureBlobUploadResponse(
@@ -205,6 +218,12 @@ async def upload_to_azure_blob(
     except Exception as e:
         upload_time = time.time() - start_time
         error_msg = f"Azure upload failed: {str(e)}"
+        
+        logger.error(f"[{upload_id}] ❌ Azure upload failed!")
+        logger.error(f"[{upload_id}] Error: {str(e)}")
+        logger.error(f"[{upload_id}] Exception type: {type(e).__name__}")
+        logger.error(f"[{upload_id}] Upload time before failure: {upload_time:.2f}s")
+        
         await ctx.error(error_msg)
         
         return AzureBlobUploadResponse(
@@ -221,13 +240,21 @@ async def generate_video_with_progress(
     ctx: Context,
     image_path: Optional[str] = None,
     poll_interval: int = 10,
-    max_poll_time: int = 600
+    max_poll_time: int = 900  # Increased to 15 minutes
 ) -> dict:
     """Generate a video using Veo 3 with progress tracking"""
     
     start_time = time.time()
+    request_id = f"veo3_{int(start_time)}"
     
     try:
+        # Log detailed request information
+        logger.info(f"[{request_id}] Starting video generation request")
+        logger.info(f"[{request_id}] Model: {model}")
+        logger.info(f"[{request_id}] Prompt: {prompt}")
+        logger.info(f"[{request_id}] Image path: {image_path if image_path else 'None'}")
+        logger.info(f"[{request_id}] Max poll time: {max_poll_time}s")
+        
         await ctx.info(f"Starting video generation with model: {model}")
         await ctx.info(f"Prompt: {prompt[:100]}...")
         
@@ -236,8 +263,13 @@ async def generate_video_with_progress(
         
         if image_path and os.path.exists(image_path):
             await ctx.info(f"Uploading image: {image_path}")
+            logger.info(f"[{request_id}] Uploading image file: {image_path}")
             image_file = gemini_client.files.upload(path=image_path)
+            logger.info(f"[{request_id}] Image uploaded, file URI: {image_file.uri}")
+            
             # For image-to-video, we need to pass the image
+            logger.info(f"[{request_id}] Calling Gemini API for image-to-video generation")
+            logger.info(f"[{request_id}] API Request - Model: {model}, Prompt: {prompt}, Image: {image_file.uri}")
             operation = gemini_client.models.generate_videos(
                 model=model,
                 prompt=prompt,
@@ -245,17 +277,25 @@ async def generate_video_with_progress(
             )
         else:
             # For text-to-video, only model and prompt are needed
+            logger.info(f"[{request_id}] Calling Gemini API for text-to-video generation")
+            logger.info(f"[{request_id}] API Request - Model: {model}, Prompt: {prompt}")
             operation = gemini_client.models.generate_videos(
                 model=model,
                 prompt=prompt
             )
         
+        logger.info(f"[{request_id}] API call initiated, operation name: {operation.name}")
+        
         await ctx.report_progress(progress=10, total=100)
         
         # Poll for completion with progress updates
+        poll_count = 0
         while not operation.done:
             elapsed = time.time() - start_time
+            poll_count += 1
+            
             if elapsed > max_poll_time:
+                logger.error(f"[{request_id}] Video generation timed out after {max_poll_time}s, {poll_count} polls")
                 await ctx.report_progress(progress=0, total=100)  # Reset on timeout
                 raise TimeoutError(f"Video generation timed out after {max_poll_time} seconds")
             
@@ -264,16 +304,23 @@ async def generate_video_with_progress(
             estimated_progress = min(10 + (elapsed / 300) * 80, 85)  # Cap at 85% until done
             await ctx.report_progress(progress=int(estimated_progress), total=100)
             
+            # Log polling status every 5 polls to avoid spam
+            if poll_count % 5 == 0:
+                logger.info(f"[{request_id}] Polling status - Poll #{poll_count}, Elapsed: {elapsed:.1f}s, Progress: {estimated_progress:.1f}%")
+            
             await ctx.info(f"Generating video... ({elapsed:.1f}s elapsed)")
             await asyncio.sleep(poll_interval)
             operation = gemini_client.operations.get(operation)
         
         # Check if generation was successful
         if not hasattr(operation.response, 'generated_videos') or not operation.response.generated_videos:
+            logger.error(f"[{request_id}] Video generation failed - no videos in response")
             await ctx.report_progress(progress=0, total=100)  # Reset on error
             raise RuntimeError("Video generation failed - no videos in response")
         
         generated_video = operation.response.generated_videos[0]
+        logger.info(f"[{request_id}] Video generation completed successfully")
+        logger.info(f"[{request_id}] Generated video URI: {generated_video.video.uri}")
         
         await ctx.report_progress(progress=90, total=100)
         
@@ -288,8 +335,12 @@ async def generate_video_with_progress(
         
         # Download the video
         await ctx.info(f"Downloading video to: {output_path}")
+        logger.info(f"[{request_id}] Downloading video from Gemini to local path: {output_path}")
         gemini_client.files.download(file=generated_video.video)
         generated_video.video.save(str(output_path))
+        
+        file_size = output_path.stat().st_size if output_path.exists() else 0
+        logger.info(f"[{request_id}] Video downloaded successfully, size: {file_size} bytes")
         
         await ctx.report_progress(progress=95, total=100)
         
@@ -304,6 +355,9 @@ async def generate_video_with_progress(
         
         if AZURE_UPLOAD_ENABLED and output_path.exists():
             await ctx.info("Uploading video to Azure Blob Storage...")
+            logger.info(f"[{request_id}] Starting Azure Blob Storage upload")
+            logger.info(f"[{request_id}] Azure upload - File: {output_path}, Blob name: {filename}")
+            
             upload_result = await upload_to_azure_blob(
                 file_path=str(output_path),
                 blob_name=filename,
@@ -311,10 +365,31 @@ async def generate_video_with_progress(
             )
             azure_upload_success = upload_result.success
             azure_blob_url = upload_result.blob_url
+            
+            if azure_upload_success:
+                logger.info(f"[{request_id}] ✅ Azure upload successful!")
+                logger.info(f"[{request_id}] 🔗 Azure Blob URL: {azure_blob_url}")
+                logger.info(f"[{request_id}] Azure upload time: {upload_result.upload_time:.2f}s")
+            else:
+                logger.error(f"[{request_id}] ❌ Azure upload failed: {upload_result.error_message}")
+        else:
+            if not AZURE_UPLOAD_ENABLED:
+                logger.info(f"[{request_id}] Azure upload disabled")
+            else:
+                logger.warning(f"[{request_id}] Video file not found for Azure upload: {output_path}")
         
         await ctx.report_progress(progress=100, total=100)
         
-        return {
+        # Log final results
+        logger.info(f"[{request_id}] 🎉 Video generation process completed!")
+        logger.info(f"[{request_id}] Final results:")
+        logger.info(f"[{request_id}]   - Local file: {output_path}")
+        logger.info(f"[{request_id}]   - File size: {file_size} bytes ({file_size/1024/1024:.1f} MB)")
+        logger.info(f"[{request_id}]   - Generation time: {generation_time:.1f}s")
+        logger.info(f"[{request_id}]   - Azure URL: {azure_blob_url if azure_blob_url else 'Not uploaded'}")
+        logger.info(f"[{request_id}]   - Azure upload success: {azure_upload_success}")
+        
+        result = {
             "video_path": str(output_path),
             "filename": filename,
             "model": model,
@@ -327,7 +402,12 @@ async def generate_video_with_progress(
             "azure_upload_success": azure_upload_success
         }
         
+        return result
+        
     except Exception as e:
+        logger.error(f"[{request_id}] ❌ Video generation failed with exception: {str(e)}")
+        logger.error(f"[{request_id}] Exception type: {type(e).__name__}")
+        logger.error(f"[{request_id}] Total elapsed time: {time.time() - start_time:.1f}s")
         await ctx.report_progress(progress=0, total=100)  # Reset on error
         await ctx.error(f"Video generation failed: {str(e)}")
         raise ValueError(f"Video generation failed: {str(e)}")
@@ -351,6 +431,10 @@ async def generate_video(
     parameters are not currently supported in the public API.
     """
     
+    tool_call_id = f"generate_video_{int(time.time())}"
+    logger.info(f"[{tool_call_id}] 🎬 MCP Tool Called: generate_video")
+    logger.info(f"[{tool_call_id}] Parameters: prompt='{prompt}', model='{model}'")
+    
     await ctx.info(f"Starting video generation with prompt: {prompt[:100]}...")
     
     if not prompt.strip():
@@ -373,11 +457,18 @@ async def generate_video(
         await ctx.info(f"Video generated successfully: {result['filename']}")
         
         # Return simple JSON with only Azure video URL
-        return {
+        response = {
             "azure_video_url": result.get('azure_blob_url')
         }
         
+        logger.info(f"[{tool_call_id}] ✅ MCP Tool Response: {response}")
+        logger.info(f"[{tool_call_id}] 🎬 generate_video completed successfully")
+        
+        return response
+        
     except Exception as e:
+        logger.error(f"[{tool_call_id}] ❌ MCP Tool Failed: generate_video")
+        logger.error(f"[{tool_call_id}] Error: {str(e)}")
         await ctx.error(f"Video generation failed: {str(e)}")
         raise ValueError(f"Video generation failed: {str(e)}")
 
@@ -662,6 +753,45 @@ async def list_azure_blob_videos(ctx: Context) -> AzureBlobListResponse:
     except Exception as e:
         await ctx.error(f"Failed to list Azure Blob videos: {str(e)}")
         raise ValueError(f"Failed to list Azure Blob videos: {str(e)}")
+
+
+@mcp.tool()
+async def test_connection(ctx: Context) -> dict:
+    """Test MCP server connection and configuration
+    
+    Returns:
+        dict: Server status and configuration info
+    """
+    
+    await ctx.info("Testing MCP server connection...")
+    
+    try:
+        # Check configuration
+        config_status = {
+            "gemini_api_configured": bool(API_KEY),
+            "azure_configured": bool(AZURE_CONNECTION_STRING),
+            "azure_upload_enabled": AZURE_UPLOAD_ENABLED,
+            "azure_container": AZURE_CONTAINER_NAME,
+            "output_directory": OUTPUT_DIR,
+            "server_status": "online"
+        }
+        
+        await ctx.info("✅ MCP server connection test successful")
+        
+        return {
+            "status": "success",
+            "message": "MCP server is running correctly",
+            "configuration": config_status,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        await ctx.error(f"Connection test failed: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Connection test failed: {str(e)}",
+            "timestamp": time.time()
+        }
 
 
 @mcp.tool()

@@ -1,13 +1,17 @@
 {
   "name": "mcp-veo3-azure-blob",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "MCP Server for Google Veo 3 Video Generation and Azure Blob Upload",
   "server": {
     "command": "python",
-    "args": ["mcp_veo3.py", "--output-dir", "~/Videos/Generated"],
+    "args": ["mcp_veo3_azure_blob.py", "--output-dir", "~/Videos/Generated"],
     "env": {
-      "GEMINI_API_KEY": "${GEMINI_API_KEY}"
-    }
+      "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+      "AZURE_STORAGE_CONNECTION_STRING": "${AZURE_STORAGE_CONNECTION_STRING}",
+      "AZURE_BLOB_CONTAINER_NAME": "${AZURE_BLOB_CONTAINER_NAME:-generated-videos}",
+      "AZURE_UPLOAD_ENABLED": "${AZURE_UPLOAD_ENABLED:-true}"
+    },
+    "timeout": 600
   },
   "tools": [
     {
@@ -37,6 +41,10 @@
     {
       "name": "delete_azure_blob_video",
       "description": "Delete a video from Azure Blob Storage"
+    },
+    {
+      "name": "test_connection",
+      "description": "Test MCP server connection and configuration (fast response)"
     }
   ],
   "models": {
